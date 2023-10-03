@@ -96,6 +96,7 @@ public:
     }
     bool operator == (const Matrix& B) {
         if (&B == this) return true;
+        
         if (size = B.size && B.mx_size == mx_size) {
             for (int i = 0; i < size; i++) {
                 for (int j = 0; j < size; j++) {
@@ -142,7 +143,6 @@ public:
 
         /*
             (row,col) - индекс левой верхней клетки матрицы
-
         */
         
         if (size <= 8) {
@@ -180,6 +180,105 @@ public:
                 }
             }
         }
+        return C;
+    }
+
+    friend Matrix mult_Strassen(Matrix& A, Matrix& B, int size) {
+
+        if (size <= 8) {
+            //Наивное умножение
+            Matrix C(size);
+            for (int i = 0; i < size; i++) {
+                for (int k = 0; k < size; k++) {
+                    for (int j = 0; j < size; j++) {
+                        C.m[i * C.mx_size + j] += A.m[i * A.mx_size + k] * B.m[k * B.mx_size + j];
+                    }
+                }
+            }
+            return C;
+        }
+
+        int new_size = size / 2;
+        Matrix A11(new_size);
+        Matrix A12(new_size);
+        Matrix A21(new_size);
+        Matrix A22(new_size);
+        Matrix B11(new_size);
+        Matrix B12(new_size);
+        Matrix B21(new_size);
+        Matrix B22(new_size);
+
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                if (i < new_size && j < new_size) {
+                    A11.m[i * new_size + j] = A.m[i * size + j];
+                    B11.m[i * new_size + j] = B.m[i * size + j];
+                }
+                else if (i < new_size && j >= new_size) {
+                    A12.m[i * new_size + (j-new_size)] = A.m[i * size + j];
+                    B12.m[i * new_size + (j-new_size)] = B.m[i * size + j];
+                }
+                else if (i >= new_size && j < new_size) {
+                    A21.m[(i-new_size) * new_size + j] = A.m[i * size + j];
+                    B21.m[(i-new_size) * new_size + j] = B.m[i * size + j];
+                }
+                else {
+                    A22.m[(i-new_size) * new_size + (j - new_size)] = A.m[i * size + j];
+                    B22.m[(i-new_size) * new_size + (j - new_size)] = B.m[i * size + j];
+                }
+
+            }
+        }
+        Matrix S1 = A21 + A22;
+        Matrix S2 = S1 - A11;
+        Matrix S3 = A11 - A21;
+        Matrix S4 = A12 - S2;
+        Matrix S5 = B12 - B11;
+        Matrix S6 = B22 - S5;
+        Matrix S7 = B22 - B12;
+        Matrix S8 = S6 - B21;
+        
+        Matrix P1 = mult_Strassen(S2, S6,new_size);
+        Matrix P2 = mult_Strassen(A11, B11,new_size);
+        Matrix P3 = mult_Strassen(A12, B21,new_size);
+        Matrix P4 = mult_Strassen(S3, S7,new_size);
+        Matrix P5 = mult_Strassen(S1, S5,new_size);
+        Matrix P6 = mult_Strassen(S4, B22,new_size);
+        Matrix P7 = mult_Strassen(A22, S8,new_size);
+
+        Matrix T1 = P1 + P2;
+        Matrix T2 = T1 + P4;
+
+        Matrix C11 = P2 + P3;
+        Matrix C12 = T1 + P5 + P6;
+        Matrix C21 = T2 - P7;
+        Matrix C22 = T2 + P5;
+
+        Matrix C(size);
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                double& val = C.m[i * C.mx_size + j];
+                if (i < new_size && j < new_size) {
+                    val = C11.m[i * C11.mx_size + j];
+                }
+                else if (i < new_size && j >= new_size) {
+                    val = C12.m[i * C12.mx_size + (j - new_size)];
+                }
+                else if (i >= new_size && j < new_size) {
+                    val = C21.m[(i - new_size) * C21.mx_size + (j)];
+                }
+                else {
+                    val = C22.m[(i - new_size) * C22.mx_size + (j - new_size)];
+                }
+            }
+        }
+        return C;
+    }
+
+    friend Matrix mult_Strassen(Matrix& A, Matrix& B) {
+        Matrix C = mult_Strassen(A, B, A.mx_size);
+
+        C.size = A.size;
         return C;
     }
 
@@ -291,15 +390,11 @@ int main(int argc, char* argv[]) {
     */
 
     Matrix A,B,C,C2;
+    
     read_bin(input_file_bin, A, B);
     ofstream out(output_time);
     auto start = chrono::high_resolution_clock::now();
-    //C = mult(A,B);
-    C2 = mult_block(A, B);
-    
-
-    
-    
+    C = mult_Strassen(A,B);
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> duration = (end - start);
     duration *= 1000.0 * 1000.0;
