@@ -1,7 +1,6 @@
 
 #include <iostream>
 #include <chrono>
-#include <random>
 #include <fstream>
 #include <string>
 
@@ -9,46 +8,6 @@
 #include "mkl.h"
 
 using namespace std;
-constexpr double eps = 0.00000000001;
-
-mt19937 random_generator(chrono::steady_clock::now().time_since_epoch().count());
-
-void mult_mkl(const string& input, const string& output) {
-
-
-    double alpha, beta;
-    alpha = 1.0;
-    beta = 0.0;
-    int n = 3;
-
-    ifstream in(input, ios::binary);
-    in.read((char*)&n, sizeof(int));
-
-    cout << "HERE n :" << n << endl;
-
-    double* A = new double[n * n];
-    double* B = new double[n * n];
-    double* C = new double[n * n];
-
-    in.read((char*)(A), sizeof(double) * n * n);
-    in.read((char*)&n, sizeof(int));
-    in.read((char*)(B), sizeof(double) * n * n);
-
-
-    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-        n, n, n, alpha, A, n, B, n, beta, C, n);
-
-
-    cout << "C:" << '\n';
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++) {
-            cout << C[i * n + j] << ' ';
-        }
-        cout << '\n';
-    }
-
-
-}
 
 
 int main(int argc, char* argv[]) {
