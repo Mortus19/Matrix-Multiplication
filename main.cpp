@@ -77,6 +77,7 @@ public:
         }
         return ans;
     }
+
     Matrix operator - (const Matrix& B) {
         Matrix ans(size);
         for (int i = 0; i < size; i++) {
@@ -96,9 +97,9 @@ public:
         }
         return ans;
     }
+
     bool operator == (const Matrix& B) {
         if (&B == this) return true;
-        
         if (size = B.size && B.mx_size == mx_size) {
             for (int i = 0; i < size; i++) {
                 for (int j = 0; j < size; j++) {
@@ -116,7 +117,7 @@ public:
     }
 
 
-    Matrix& operator =  (const Matrix& B) {
+    Matrix& operator = (const Matrix& B) {
         if (&B == this) return *this;
         this->clear();
         size = B.size;
@@ -133,7 +134,6 @@ public:
             for (int k = 0; k < A.size; ++k) {
                 int A_const = C_const + k;
                 int B_const = k * A.mx_size;
-                
                 #pragma omp simd simdlen(1)
                 for (int j = 0; j < A.size; ++j) {
                     ans.m[C_const + j] += A.m[A_const] * B.m[B_const + j];
@@ -141,49 +141,6 @@ public:
             }
         }
         return ans;
-    }
-    friend Matrix mult_block(Matrix& A, Matrix& B, int row_A, int col_A,int row_B , int col_B, int size) {
-
-        /*
-            (row,col) - индекс левой верхней клетки матрицы
-        */
-        
-        if (size <= 8) {
-            //Наивное умножение
-            Matrix C(size);
-            for (int i = 0; i < size; i++) {
-                for (int k = 0; k < size; k++) {
-                    for (int j = 0; j < size; j++) {
-                        C.m[i * C.mx_size + j] += A.m[(i + row_A) * A.mx_size + (k + col_A)] * B.m[(k + row_B) * B.mx_size + (j + col_B)];
-                    }
-                }
-            }
-            return C;
-        }
-        int new_size = size / 2;
-        Matrix C11 = mult_block(A, B, row_A, col_A, row_B, col_B, new_size) + mult_block(A, B, row_A, col_A + new_size,row_B + new_size,col_B,new_size);
-        Matrix C12 = mult_block(A, B, row_A, col_A, row_B, col_B + new_size, new_size) + mult_block(A, B, row_A, col_A + new_size,row_B + new_size,col_B+new_size,new_size);
-        Matrix C21 = mult_block(A, B, row_A+new_size, col_A, row_B, col_B, new_size) + mult_block(A, B, row_A+new_size, col_A + new_size,row_B+new_size,col_B,new_size);
-        Matrix C22 = mult_block(A, B, row_A+new_size, col_A, row_B, col_B+new_size, new_size) + mult_block(A, B, row_A+new_size, col_A + new_size,row_B + new_size,col_B+new_size,new_size);
-        Matrix C(size);
-        for (int i = 0; i < size; i++) {
-            for (int j = 0; j < size; j++) {
-                double& val = C.m[i * C.mx_size + j];
-                if (i < new_size && j < new_size) {
-                    val = C11.m[i * C11.mx_size + j];
-                }
-                else if (i < new_size && j >= new_size) {
-                    val = C12.m[i * C12.mx_size + (j-new_size)];
-                }
-                else if(i >= new_size && j < new_size) {
-                    val = C21.m[(i-new_size) * C21.mx_size + (j)];
-                }
-                else {
-                    val = C22.m[(i - new_size) * C22.mx_size + (j-new_size)];
-                }
-            }
-        }
-        return C;
     }
 
     friend Matrix mult_Strassen(Matrix& A, Matrix& B, int size) {
@@ -284,12 +241,6 @@ public:
         return C;
     }
 
-    friend Matrix mult_block(Matrix& A, Matrix& B) {
-        Matrix C = mult_block(A, B, 0, 0, 0, 0, A.mx_size);
-        C.size = A.size;
-        return C;
-    }
-
     friend void read_bin(const string& input, Matrix& A, Matrix& B) {
         A.clear();
         B.clear();
@@ -370,14 +321,6 @@ mt19937 random_generator(chrono::steady_clock::now().time_since_epoch().count())
 
 
 int main(int argc, char* argv[]) {
-
-    /*
-        через командную строку передаем:
-        1)Бинарник с входными данными
-        2)Куда записать время работы программы
-        3)Куда записать результат умножения
-        string input_file_txt = "C:/Users/Zver/Source/Repos/Project4/x64/Release/input.txt";
-    */
     
     const string input_file_bin = "C:/Users/Zver/Source/Repos/Project4/x64/Release/input.bin";
     const string input_file_txt = "C:/Users/Zver/Source/Repos/Project4/x64/Release/input.txt";
