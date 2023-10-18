@@ -6,6 +6,8 @@
 #include <string>
 
 #include <omp.h>
+#include "mkl.h"
+
 using namespace std;
 constexpr double eps = 0.00000000001;
 
@@ -125,13 +127,14 @@ public:
 
     friend Matrix mult(Matrix& A , Matrix& B) {
         Matrix ans(A.size);
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for (int i = 0; i < A.size; ++i) {
             int C_const = i * A.mx_size;
             for (int k = 0; k < A.size; ++k) {
                 int A_const = C_const + k;
                 int B_const = k * A.mx_size;
-                #pragma omp simd
+                
+                #pragma omp simd simdlen(1)
                 for (int j = 0; j < A.size; ++j) {
                     ans.m[C_const + j] += A.m[A_const] * B.m[B_const + j];
                 }
@@ -277,7 +280,6 @@ public:
 
     friend Matrix mult_Strassen(Matrix& A, Matrix& B) {
         Matrix C = mult_Strassen(A, B, A.mx_size);
-
         C.size = A.size;
         return C;
     }
@@ -378,8 +380,9 @@ int main(int argc, char* argv[]) {
     */
     
     const string input_file_bin = "C:/Users/Zver/Source/Repos/Project4/x64/Release/input.bin";
+    const string input_file_txt = "C:/Users/Zver/Source/Repos/Project4/x64/Release/input.txt";
     const string output_time = "C:/Users/Zver/Source/Repos/Project4/x64/Release/output.txt";
-    const string native_ans = "C:/Users/Zver/Source/Repos/Project4/x64/Release/native_ans.bin";
+    const string my_ans = "C:/Users/Zver/Source/Repos/Project4/x64/Release/my_ans.bin";
 
     /*
     if (argc > 3) {
@@ -389,17 +392,17 @@ int main(int argc, char* argv[]) {
     }
     */
 
-    Matrix A,B,C,C2;
+    Matrix A,B,C;
     
     read_bin(input_file_bin, A, B);
     ofstream out(output_time);
     auto start = chrono::high_resolution_clock::now();
-    C = mult_Strassen(A,B);
+    C = mult(A,B);
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> duration = (end - start);
     duration *= 1000.0 * 1000.0;
     out.precision(10);
     out << fixed << duration.count() << '\n';
-    output_bin(native_ans, C);
+    output_bin(my_ans, C);
     return 0;
 }
