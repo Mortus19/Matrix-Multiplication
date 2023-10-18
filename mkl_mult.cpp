@@ -11,14 +11,6 @@ using namespace std;
 
 int main(int argc, char* argv[]) {
 
-    /*
-        через командную строку передаем:
-        1)Бинарник с входными данными
-        2)Куда записать время работы программы
-        3)Куда записать результат умножения
-        string input_file_txt = "C:/Users/Zver/Source/Repos/Project4/x64/Release/input.txt";
-    */
-
     const string input_file_bin = "C:/Users/Zver/Source/Repos/Project4/x64/Release/input.bin";
     const string input_file_txt = "C:/Users/Zver/Source/Repos/Project4/x64/Release/input.txt";
     const string output_time = "C:/Users/Zver/Source/Repos/Project4/x64/Release/output_mkl_time.txt";
