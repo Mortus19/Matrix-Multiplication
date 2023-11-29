@@ -237,30 +237,34 @@ public:
     friend Matrix mult_block(const Matrix& A, const Matrix& B) {
 
         int N = A.size;
-        const int Block = 150;
+        const int Block = 96;
+        const int m = 32 * 1;
+        const int n = 32 * 4;
+        const int p = 32 * 16;
         Matrix ans(N);
-        //L2CacheSize  L3CacheSize
-        //2048Kb         12288Kb
-        int number_iter = N/Block;
+        double sizekb = m * n + n * p + m * p;
+        sizekb *= 8;
+        sizekb /= 1024;
+        //cout << sizekb << '\n';
         #pragma omp parallel for
-        for (int x = 0; x < number_iter; x++)
-            for (int y = 0; y < number_iter; y++)
-                for (int z = 0; z < number_iter; z++)
-                    for (int i = x * Block; i < (x + 1) * Block; i++) {
+
+        for (int x = 0; x < N; x += m)
+            for (int z = 0; z < N; z += n)
+                for (int y = 0; y < N; y += p)
+                    for (int i = x ; i < min(x + m,N); i++) {
                         int C_const = i * A.mx_size;
-                        for (int k = z * Block; k < (z + 1) * Block; k++) {
+                        for (int k = z; k < min(z + n,N); k++) {
                             int A_const = C_const + k;
                             int B_const = k * A.mx_size;
-                            //#pragma omp simd
-                            #pragma omp simd simdlen(8)
-                            for (int j = y * Block; j < (y + 1) * Block; j++) {
+                            //#pragma omp simd simdlen(8)
+                            #pragma omp simd
+                            for (int j = y; j < min(y + p,N); j++) {
                                 ans.m[C_const + j] += A.m[A_const] * B.m[B_const + j];
                             }
                         }
                     }
         return ans;
     }
-
     friend void add(Matrix &A, Matrix &B, Matrix &C, int ax, int ay, int bx, int by, int cx, int cy, int cur_size) {
         for (int i = 0; i < cur_size; i++) {
             for (int j = 0; j < cur_size; j++) {
@@ -477,9 +481,7 @@ int main(int argc, char *argv[]) {
     const string my_ans = "C:/Users/Zver/Source/Repos/Project4/x64/Release/my_ans.bin";
 
     /*
-    * 20219604.4000000022
-    * 15570995.0999999996
-    * 3364945.1000000001
+    
 
     if (argc > 3) {
         input_file_bin = argv[1];
@@ -495,6 +497,7 @@ int main(int argc, char *argv[]) {
     auto start = chrono::high_resolution_clock::now();
     //C = Mult_Strassen_Memory_efficient(A, B);
     //cout << C << '\n';
+    //cout << "======\n";
     C = mult_block(A, B);
     //C = mult(A, B);
     //cout << C << '\n';
