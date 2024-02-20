@@ -124,22 +124,22 @@ public:
         return *this;
     }
 
-    friend Matrix mult(Matrix &A, Matrix &B) {
-        Matrix ans(A.size);
-        #pragma omp parallel for
-        for (int i = 0; i < A.size; ++i) {
-            int C_const = i * A.mx_size;
-            for (int k = 0; k < A.size; ++k) {
-                int A_const = C_const + k;
-                int B_const = k * A.mx_size;
-                //#pragma omp simd
-                #pragma omp simd simdlen(8)
-                for (int j = 0; j < A.size; ++j) {
-                    ans.m[C_const + j] += A.m[A_const] * B.m[B_const + j];
+    friend Matrix mult(Matrix& A, Matrix& B) {
+        const int N = A.mx_size;
+        Matrix C(A.size);
+        for (int i = 0; i < A.size; i++)
+            for (int j = 0; j < A.size; j++)
+                C.m[i * N + j] = 0;
+        int x, y, z;
+        for (int i = 0; i < A.size; i++) {
+            for (int k = 0; k < A.size; k++) {
+                #pragma omp simd
+                for (int j = 0; j < A.size; j++) {
+                    C.m[i * N + j] += A.m[i * N + k] * B.m[k * N + j];
                 }
             }
         }
-        return ans;
+        return C;
     }
 
     friend Matrix mult_Strassen(const Matrix &A, const Matrix &B, int size) {
@@ -237,32 +237,44 @@ public:
     friend Matrix mult_block(const Matrix& A, const Matrix& B) {
 
         int N = A.size;
-        const int Block = 96;
-        const int m = 32 * 1;
-        const int n = 32 * 4;
-        const int p = 32 * 16;
+        constexpr int m = 32 * 3;
+        constexpr int n = 32 * 12;
+        constexpr int p = 32 * 6;
+        constexpr int small_block = 32;
         Matrix ans(N);
         double sizekb = m * n + n * p + m * p;
         sizekb *= 8;
-        sizekb /= 1024;
+        sizekb /= 1024; 
+        //есть еще идея избавиться от min , но это позже
         //cout << sizekb << '\n';
         #pragma omp parallel for
 
-        for (int x = 0; x < N; x += m)
+        for (int y = 0; y < N; y += p)
             for (int z = 0; z < N; z += n)
-                for (int y = 0; y < N; y += p)
-                    for (int i = x ; i < min(x + m,N); i++) {
-                        int C_const = i * A.mx_size;
-                        for (int k = z; k < min(z + n,N); k++) {
-                            int A_const = C_const + k;
-                            int B_const = k * A.mx_size;
-                            //#pragma omp simd simdlen(8)
-                            #pragma omp simd
-                            for (int j = y; j < min(y + p,N); j++) {
-                                ans.m[C_const + j] += A.m[A_const] * B.m[B_const + j];
+                for (int x = 0; x < N; x += m) {
+
+                    for (int xx = x; xx < min(N, x + m); xx += small_block) {
+                        for (int yy = y; yy < min(N, y + p); yy += small_block) {
+                            for (int zz = z; zz < min(N, z + n); zz += small_block) {
+                    
+                                for (int i = xx; i < min(xx + small_block, N); i++) {
+                                    int C_const = i * A.mx_size;
+                                    for (int k = zz; k < min(zz + small_block, N); k++) {
+                                        int A_const = C_const + k;
+                                        int B_const = k * A.mx_size;
+                                        //#pragma omp simd simdlen(8)
+                                        #pragma omp simd
+                                        for (int j = yy; j < min(yy + small_block, N); j++) {
+                                            ans.m[C_const + j] += A.m[A_const] * B.m[B_const + j];
+                                        }
+                                    }
+                                }
+
                             }
                         }
+
                     }
+                }
         return ans;
     }
     friend void add(Matrix &A, Matrix &B, Matrix &C, int ax, int ay, int bx, int by, int cx, int cy, int cur_size) {
@@ -299,7 +311,6 @@ public:
             for (int i = 0; i < cur_size; i++) {
                 for (int k = 0; k < cur_size; k++) {
                     for (int j = 0; j < cur_size; j++) {
-                        //C[cx + i][cy + j] += A[ax + i][ay + k] * B[bx + k][by + j]
                         C.m[(i + cx) * C.mx_size + (j + cy)] +=
                                 A.m[(i + ax) * A.mx_size + (k + ay)] * B.m[(k + bx) * B.mx_size + (j + by)];
                     }
@@ -491,7 +502,9 @@ int main(int argc, char *argv[]) {
     */
 
     Matrix A, B, C;
-
+    //54531948
+    //46291219
+    //52243276
     read_bin(input_file_bin, A, B);
     ofstream out(output_time);
     auto start = chrono::high_resolution_clock::now();
@@ -499,7 +512,6 @@ int main(int argc, char *argv[]) {
     //cout << C << '\n';
     //cout << "======\n";
     C = mult_block(A, B);
-    //C = mult(A, B);
     //cout << C << '\n';
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> duration = (end - start);
