@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string>
 #include <omp.h>
+#include <immintrin.h>
 
 using namespace std;
 constexpr double eps = 0.00000000001;
@@ -237,12 +238,16 @@ public:
     friend Matrix mult_block(const Matrix& A, const Matrix& B) {
 
         int N = A.size;
-        constexpr int m = 32 * 3;
-        constexpr int n = 32 * 12;
-        constexpr int p = 32 * 6;
-        constexpr int small_block = 32;
+        constexpr int m = 8 * 8;//x
+        constexpr int p = 8 * 8 * 8;//y
+        constexpr int n = 8 * 8 * 2;//z
+        constexpr int small_x = 8;
+        constexpr int small_y = 8 * 8 * 8;
+        constexpr int small_z = 8 * 2;
+
         Matrix ans(N);
         double sizekb = m * n + n * p + m * p;
+        sizekb = small_x * small_y + small_x * small_z + small_z * small_y;
         sizekb *= 8;
         sizekb /= 1024; 
         //есть еще идея избавиться от min , но это позже
@@ -253,19 +258,22 @@ public:
             for (int z = 0; z < N; z += n)
                 for (int x = 0; x < N; x += m) {
 
-                    for (int xx = x; xx < min(N, x + m); xx += small_block) {
-                        for (int yy = y; yy < min(N, y + p); yy += small_block) {
-                            for (int zz = z; zz < min(N, z + n); zz += small_block) {
+                    for (int xx = x; xx < min(N, x + m); xx += small_x) {
+                        for (int yy = y; yy < min(N, y + p); yy += small_y) {
+                            for (int zz = z; zz < min(N, z + n); zz += small_z) {
                     
-                                for (int i = xx; i < min(xx + small_block, N); i++) {
+                                for (int i = xx; i < min(xx + small_x, N); i++) {
                                     int C_const = i * A.mx_size;
-                                    for (int k = zz; k < min(zz + small_block, N); k++) {
+
+                                    for (int k = zz; k < min(zz + small_z, N); k++) {
                                         int A_const = C_const + k;
                                         int B_const = k * A.mx_size;
                                         //#pragma omp simd simdlen(8)
                                         #pragma omp simd
-                                        for (int j = yy; j < min(yy + small_block, N); j++) {
+                                        for (int j = yy; j < min(yy + small_y, N); j++) {
+                                            
                                             ans.m[C_const + j] += A.m[A_const] * B.m[B_const + j];
+                                            
                                         }
                                     }
                                 }
