@@ -278,16 +278,63 @@ public:
             C += offset;
         }
     }
+    inline friend void my_micro_yadro2(const Matrix& A, double* B, double* C, int offset, int offset_A, int offset_B, int offset_C, int small_z) {
+        //A - 2 x zz
+        //B - zz x 16
+        //C - 2 x 16
+        C += offset_C;
+        B += offset_B;
+        __m256d c11 = _mm256_load_pd(C);
+        __m256d c12 = _mm256_load_pd(C + 4);
+        __m256d c13 = _mm256_load_pd(C + 8);
+        __m256d c14 = _mm256_load_pd(C + 12);
+        //C += offset;
+        __m256d c21 = _mm256_load_pd(C + offset);
+        __m256d c22 = _mm256_load_pd(C + offset + 4);
+        __m256d c23 = _mm256_load_pd(C + offset + 8);
+        __m256d c24 = _mm256_load_pd(C + offset + 12);
 
+        for (int i = 0; i < small_z; i++) {
+            __m256d a1 = _mm256_set1_pd(A.m[offset_A + i]);
+            __m256d a2 = _mm256_set1_pd(A.m[offset_A + i + offset]);
+
+            __m256d b1 = _mm256_load_pd(B);
+            __m256d b2 = _mm256_load_pd(B + 4);
+            __m256d b3 = _mm256_load_pd(B + 8);
+            __m256d b4 = _mm256_load_pd(B + 12);
+
+            c11 = _mm256_fmadd_pd(a1, b1, c11);
+            c12 = _mm256_fmadd_pd(a1, b2, c12);
+            c13 = _mm256_fmadd_pd(a1, b3, c13);
+            c14 = _mm256_fmadd_pd(a1, b4, c14);
+
+            c21 = _mm256_fmadd_pd(a2, b1, c21);
+            c22 = _mm256_fmadd_pd(a2, b2, c22);
+            c23 = _mm256_fmadd_pd(a2, b3, c23);
+            c24 = _mm256_fmadd_pd(a2, b4, c24);
+
+            B += offset;
+        }
+
+        _mm256_store_pd(C, c11);
+        _mm256_store_pd(C + 4, c12);
+        _mm256_store_pd(C + 8, c13);
+        _mm256_store_pd(C + 12, c14);
+
+        _mm256_store_pd(C + offset, c21);
+        _mm256_store_pd(C + offset + 4, c22);
+        _mm256_store_pd(C + offset + 8, c23);
+        _mm256_store_pd(C + offset + 12, c24);
+    }
     friend Matrix mult_block(const Matrix& A, const Matrix& B) {
 
         int N = A.size;
-        constexpr int m = 8 * 8 * 2;//x
+        constexpr int m = 8 * 4;//x
         constexpr int p = 8 * 8 * 8;//y
-        constexpr int n = 8 * 4;//z
-        constexpr int small_x = 8;
+        constexpr int n = 8 * 8 * 2;//z
+        constexpr int small_x = 2;
         constexpr int small_y = 16;
-        constexpr int small_z = 2;
+        constexpr int small_z = 8;
 
         Matrix ans(N);
         double sizekb = m * n + n * p + m * p;
@@ -298,15 +345,14 @@ public:
         //есть еще идея избавиться от min , но это позже
         //cout << sizekb << '\n';
         #pragma omp parallel for
-        for (int y = 0; y < N; y += p)
-            for (int x = 0; x < N; x += m)
+        for (int x = 0; x < N; x += m)
+            for (int y = 0; y < N; y += p)
                 for (int z = 0; z < N; z += n)
 
-                    for (int xx = x; xx < min(N, x + m); xx += small_x)
-                        for (int yy = y; yy < min(N, y + p); yy += small_y)
-                            for (int zz = z; zz < min(N, z + n); zz += small_z)
+                    for (int zz = z; zz < min(N, z + n); zz += small_z)
+                        for (int xx = x; xx < min(N, x + m); xx += small_x)
+                            for (int yy = y; yy < min(N, y + p); yy += small_y)
                             {
-
 
                                 if (xx + small_x >= N || yy + small_y >= N || zz + small_z >= N) {
                                     //just naive
@@ -325,8 +371,8 @@ public:
 
                                 }
                                 else {
-                                    my_micro_yadro(A, (double*)B.m.data(), (double*)ans.m.data(), offset,
-                                        xx * A.mx_size + zz, zz * A.mx_size + yy, xx * A.mx_size + yy);
+                                    my_micro_yadro2(A, (double*)B.m.data(), (double*)ans.m.data(), offset,
+                                        xx * A.mx_size + zz, zz * A.mx_size + yy, xx * A.mx_size + yy,small_z);
                                 }
 
                             }
