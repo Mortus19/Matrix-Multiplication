@@ -13,7 +13,7 @@ constexpr double eps = 0.00000000001;
 class Matrix {
     /*
     mx_size - размер , который является степенью двойки
-    нужен для того, чтобы нормально работало перемножение матриц
+    нужен для того, чтобы нормально работало перемножение матриц в алгоритме Штрассена
     */
     int size;
     int mx_size;
@@ -235,54 +235,149 @@ public:
         return C;
     }
 
+    inline friend void my_micro_yadro(const Matrix& A , double* B , double* C, int offset , int offset_A, int offset_B, int offset_C) {
+        //A - 8 x 2
+        //B - 2 x 16
+        //C - 8 x 16
+        C += offset_C;
+        B += offset_B;
+        __m256d b11 = _mm256_load_pd(B);
+        __m256d b12 = _mm256_load_pd(B+4);
+        __m256d b13 = _mm256_load_pd(B+8);
+        __m256d b14 = _mm256_load_pd(B+12);
+        B += offset;
+        __m256d b21 = _mm256_load_pd(B);
+        __m256d b22 = _mm256_load_pd(B + 4);
+        __m256d b23 = _mm256_load_pd(B + 8);
+        __m256d b24 = _mm256_load_pd(B + 12);
+
+        for (int i = 0; i < 8; i++) {
+            __m256d a1 = _mm256_set1_pd(A.m[offset_A]);
+            __m256d a2 = _mm256_set1_pd(A.m[offset_A + 1]);
+
+            __m256d c1 = _mm256_load_pd(C);
+            __m256d c2 = _mm256_load_pd(C+4);
+            __m256d c3 = _mm256_load_pd(C+8);
+            __m256d c4 = _mm256_load_pd(C+12);
+
+            c1 = _mm256_fmadd_pd(a1, b11, c1);
+            c2 = _mm256_fmadd_pd(a1, b12, c2);
+            c3 = _mm256_fmadd_pd(a1, b13, c3);
+            c4 = _mm256_fmadd_pd(a1, b14, c4);
+
+            c1 = _mm256_fmadd_pd(a2, b21, c1);
+            c2 = _mm256_fmadd_pd(a2, b22, c2);
+            c3 = _mm256_fmadd_pd(a2, b23, c3);
+            c4 = _mm256_fmadd_pd(a2, b24, c4);
+
+            _mm256_store_pd(C, c1);
+            _mm256_store_pd(C+4, c2);
+            _mm256_store_pd(C+8, c3);
+            _mm256_store_pd(C+12, c4);
+            offset_A += offset;
+            C += offset;
+        }
+    }
+    
+    inline friend void my_micro_yadro2(const Matrix& A, double* B, double* C, int offset, int offset_A, int offset_B, int offset_C, int small_z) {
+        //A - 2 x zz
+        //B - zz x 16
+        //C - 2 x 16
+        C += offset_C;
+        B += offset_B;
+        __m256d c11 = _mm256_load_pd(C);
+        __m256d c12 = _mm256_load_pd(C + 4);
+        __m256d c13 = _mm256_load_pd(C + 8);
+        __m256d c14 = _mm256_load_pd(C + 12);
+        //C += offset;
+        __m256d c21 = _mm256_load_pd(C + offset);
+        __m256d c22 = _mm256_load_pd(C + offset + 4);
+        __m256d c23 = _mm256_load_pd(C + offset + 8);
+        __m256d c24 = _mm256_load_pd(C + offset + 12);
+
+        for (int i = 0; i < small_z; i++) {
+            __m256d a1 = _mm256_set1_pd(A.m[offset_A + i]);
+            __m256d a2 = _mm256_set1_pd(A.m[offset_A + i + offset]);
+
+            __m256d b1 = _mm256_load_pd(B);
+            __m256d b2 = _mm256_load_pd(B + 4);
+            __m256d b3 = _mm256_load_pd(B + 8);
+            __m256d b4 = _mm256_load_pd(B + 12);
+
+            c11 = _mm256_fmadd_pd(a1, b1, c11);
+            c12 = _mm256_fmadd_pd(a1, b2, c12);
+            c13 = _mm256_fmadd_pd(a1, b3, c13);
+            c14 = _mm256_fmadd_pd(a1, b4, c14);
+
+            c21 = _mm256_fmadd_pd(a2, b1, c21);
+            c22 = _mm256_fmadd_pd(a2, b2, c22);
+            c23 = _mm256_fmadd_pd(a2, b3, c23);
+            c24 = _mm256_fmadd_pd(a2, b4, c24);
+
+            B += offset;
+        }
+
+        _mm256_store_pd(C, c11);
+        _mm256_store_pd(C + 4, c12);
+        _mm256_store_pd(C + 8, c13);
+        _mm256_store_pd(C + 12, c14);
+
+        _mm256_store_pd(C + offset, c21);
+        _mm256_store_pd(C + offset + 4, c22);
+        _mm256_store_pd(C + offset + 8, c23);
+        _mm256_store_pd(C + offset + 12, c24);
+    }
     friend Matrix mult_block(const Matrix& A, const Matrix& B) {
 
         int N = A.size;
-        constexpr int m = 8 * 8;//x
+        constexpr int m = 8 * 4;//x
         constexpr int p = 8 * 8 * 8;//y
         constexpr int n = 8 * 8 * 2;//z
-        constexpr int small_x = 8;
-        constexpr int small_y = 8 * 8 * 8;
-        constexpr int small_z = 8 * 2;
+        constexpr int small_x = 2;
+        constexpr int small_y = 16;
+        constexpr int small_z = 8;
 
         Matrix ans(N);
         double sizekb = m * n + n * p + m * p;
-        sizekb = small_x * small_y + small_x * small_z + small_z * small_y;
+        //sizekb = small_x * small_y + small_x * small_z + small_z * small_y;
         sizekb *= 8;
-        sizekb /= 1024; 
+        sizekb /= 1024;
+        int offset = A.mx_size;
         //есть еще идея избавиться от min , но это позже
-        //cout << sizekb << '\n';
+        cout << sizekb << '\n';
         #pragma omp parallel for
+        for (int x = 0; x < N; x += m)
+            for (int y = 0; y < N; y += p)
+                for (int z = 0; z < N; z += n)
 
-        for (int y = 0; y < N; y += p)
-            for (int z = 0; z < N; z += n)
-                for (int x = 0; x < N; x += m) {
+                    for (int zz = z; zz < min(N, z + n); zz += small_z)
+                        for (int xx = x; xx < min(N, x + m); xx += small_x)
+                            for (int yy = y; yy < min(N, y + p); yy += small_y)
+                            {
 
-                    for (int xx = x; xx < min(N, x + m); xx += small_x) {
-                        for (int yy = y; yy < min(N, y + p); yy += small_y) {
-                            for (int zz = z; zz < min(N, z + n); zz += small_z) {
-                    
-                                for (int i = xx; i < min(xx + small_x, N); i++) {
-                                    int C_const = i * A.mx_size;
-
-                                    for (int k = zz; k < min(zz + small_z, N); k++) {
-                                        int A_const = C_const + k;
-                                        int B_const = k * A.mx_size;
-                                        //#pragma omp simd simdlen(8)
-                                        #pragma omp simd
-                                        for (int j = yy; j < min(yy + small_y, N); j++) {
-                                            
-                                            ans.m[C_const + j] += A.m[A_const] * B.m[B_const + j];
-                                            
+                                if (xx + small_x >= N || yy + small_y >= N || zz + small_z >= N) {
+                                    //just naive
+                                    for (int i = xx; i < min(xx + small_x, N); i++) {
+                                        int C_const = i * A.mx_size;
+                                        for (int k = zz; k < min(zz + small_z, N); k++) {
+                                            int A_const = C_const + k;
+                                            int B_const = k * A.mx_size;
+                                            #pragma omp simd
+                                            for (int j = yy; j < min(yy + small_y, N); j++) {
+                                                ans.m[C_const + j] += A.m[A_const] * B.m[B_const + j];
+                                                //cout << ans.m[C_const + j] << '\n';
+                                            }
                                         }
                                     }
+
+                                }
+                                else {
+                                    my_micro_yadro2(A, (double*)B.m.data(), (double*)ans.m.data(), offset,
+                                        xx * A.mx_size + zz, zz * A.mx_size + yy, xx * A.mx_size + yy, small_z);
                                 }
 
                             }
-                        }
 
-                    }
-                }
         return ans;
     }
     friend void add(Matrix &A, Matrix &B, Matrix &C, int ax, int ay, int bx, int by, int cx, int cy, int cur_size) {
