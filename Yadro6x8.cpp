@@ -1,8 +1,8 @@
-﻿
-#include <iostream>
+﻿#include <iostream>
 #include <chrono>
 #include <random>
 #include <fstream>
+#include <map>
 #include <string>
 #include <omp.h>
 #include <immintrin.h>
@@ -10,7 +10,7 @@
 using namespace std;
 constexpr double eps = 0.00000000001;
 
-void my_micro_yadro2(double* A, double* B, double* C, int offset, int small_z) {
+inline void my_micro_yadro2(double* A, double* B, double* C, int offset, int small_z) {
     //A - 6 x zz
     //B - zz x 8
     //C - 6 x 8
@@ -87,7 +87,7 @@ void my_micro_yadro2(double* A, double* B, double* C, int offset, int small_z) {
 
 }
 
-void my_micro_yadro_with_coppy(double* A, double* B, double* C, int offset_A, int offset_B, int offset_C, int small_z) {
+inline void my_micro_yadro_with_coppy(double* A, double* B, double* C, int offset_A, int offset_B, int offset_C, int small_z) {
     //A - 6 x zz
     //B - zz x 8
     //C - 6 x 8
@@ -248,8 +248,10 @@ public:
         if (size == B.size && B.mx_size == mx_size) {
             for (int i = 0; i < size; i++) {
                 for (int j = 0; j < size; j++) {
-                    if (abs(m[i * mx_size + j] - B.m[i * mx_size + j]) > eps)
+                    if (abs(m[i * mx_size + j] - B.m[i * mx_size + j]) > eps) {
+                        cout << i << ' ' << j << '\n';
                         return false;
+                    }
                 }
             }
             return true;
@@ -297,9 +299,10 @@ public:
     friend Matrix mult_block(const Matrix& A, const Matrix& B) {
 
         int N = A.size;
-        constexpr int m = 6 * 14 * 1;//x
-        constexpr int p = 8 * 8 * 1;//y
-        constexpr int n = 32 * 10 * 1;//z
+        constexpr int m = 6 * 6 * 1;//x = 36
+        constexpr int p = 8 * 20 * 1;//y = 160
+        constexpr int n = 32 * 10 * 1;//z = 320
+
         constexpr int small_x = 6;
         constexpr int small_y = 8;
         constexpr int small_z = 64;
@@ -382,64 +385,63 @@ public:
         sizekb *= 8;
         sizekb /= 1024;
         int offset = A.mx_size;
-        //есть еще идея избавиться от min , но это позже
         //cout << sizekb << '\n';
         
-
         #pragma omp parallel for proc_bind(close)
-        for (int x = 0; x < N; x += m){
-            double AA[small_x * small_z];
-            double BB[small_z * small_y];
-            double CC[small_x * small_y];
+        for (int y = 0; y < N; y += p)
             for (int z = 0; z < N; z += n)
-                for (int y = 0; y < N; y += p)
+                for (int x = 0; x < N; x += m) {
 
-                    for (int zz = z; zz < min(N, z + n); zz += small_z)
-                        for (int xx = x; xx < min(N, x + m); xx += small_x)
-                        {   
-                            /*if (xx + small_x < N && zz + small_z < N) {
-                                for (int i = 0; i < small_x; i++) {
-                                    memcpy(AA + i * small_z, ans.m.data() + (xx + i) * A.mx_size + zz, sizeof(double) * small_z);
-                                }
-                            }*/
-                            
-                            for (int yy = y; yy < min(N, y + p); yy += small_y)
-                            {
+                    int cnt_x = (min(N, x + m) - x) / small_x;
+                    int cnt_y = (min(N, y + p) - y) / small_y;
+                    int cnt_z = (min(N, z + n) - z) / small_z;
+                    //    zyx
+                    //0 - 000
+                    for (int k = 0; k < cnt_z; k++)
+                        for (int j = 0; j < cnt_y; j++)
+                            for (int i = 0; i < cnt_x; i++) {
+                                my_micro_yadro2(
+                                    (double*)A.m.data() + (x + i * small_x) * A.mx_size + (z + k * small_z),
+                                    (double*)B.m.data() + (z + k * small_z) * A.mx_size + (y + j * small_y),
+                                    (double*)ans.m.data() + (x + i * small_x) * A.mx_size + (y + j * small_y),
+                                    offset, small_z);
 
-                                if (xx + small_x >= N || yy + small_y >= N || zz + small_z >= N) {
-                                    //just naive
-                                    for (int i = xx; i < min(xx + small_x, N); i++) {
-                                        int C_const = i * A.mx_size;
-                                        for (int k = zz; k < min(zz + small_z, N); k++) {
-                                            int A_const = C_const + k;
-                                            int B_const = k * A.mx_size;
-                                            #pragma omp simd
-                                            for (int j = yy; j < min(yy + small_y, N); j++) {
-                                                ans.m[C_const + j] += A.m[A_const] * B.m[B_const + j];
-                                            }
-                                        }
-                                    }
-
-                                }
-                                else {
-
-                                    my_micro_yadro2((double*)A.m.data() + xx * A.mx_size + zz, (double*)B.m.data() + zz * A.mx_size + yy, (double*)ans.m.data() + xx * A.mx_size + yy, offset, small_z);
-
-                                    /*for (int i = 0; i < small_x; i++) {
-                                        memcpy(CC + i * small_y, ans.m.data() + (xx + i) * A.mx_size + yy, sizeof(double) * small_y);
-                                    }
-                                    for (int i = 0; i < small_z; i++) {
-                                        memcpy(BB + i * small_y, B.m.data() + (zz + i) * A.mx_size + yy, sizeof(double) * small_y);
-                                    }
-                                    my_micro_yadro_with_coppy(AA, BB, CC, small_z, small_y, small_y, small_z);
-                                    for (int i = 0; i < small_x; i++) {
-                                        memcpy(ans.m.data() + (xx + i) * A.mx_size + yy, CC + i * small_y, sizeof(double) * small_y);
-                                    }*/
-                                }
+                            }
+                                
+                    for (int i = cnt_x * small_x + x; i < min(x + m, N); i++) {
+                        int C_const = i * A.mx_size;
+                        for (int k = z; k < min(z + n, N); k++) {
+                            int A_const = C_const + k;
+                            int B_const = k * A.mx_size;
+                            #pragma omp simd
+                            for (int j = y; j < min(y + p, N); j++) {
+                                ans.m[C_const + j] += A.m[A_const] * B.m[B_const + j];
                             }
                         }
-        }
-
+                    }
+                    for (int i = x; i < cnt_x * small_x + x; i++) {
+                        int C_const = i * A.mx_size;
+                        for (int k = z; k < min(z + n, N); k++) {
+                            int A_const = C_const + k;
+                            int B_const = k * A.mx_size;
+                            #pragma omp simd
+                            for (int j = y + small_y * cnt_y; j < min(y + p, N); j++) {
+                                ans.m[C_const + j] += A.m[A_const] * B.m[B_const + j];
+                            }
+                        }
+                    }
+                    for (int i = x; i <x + small_x * cnt_x; i++) {
+                        int C_const = i * A.mx_size;
+                        for (int k = z + small_z * cnt_z; k < min(z + n, N); k++) {
+                            int A_const = C_const + k;
+                            int B_const = k * A.mx_size;
+                            #pragma omp simd
+                            for (int j = y; j < y + small_y * cnt_y; j++) {
+                                ans.m[C_const + j] += A.m[A_const] * B.m[B_const + j];
+                            }
+                        }
+                    }
+                }
         return ans;
     }
     
@@ -529,10 +531,14 @@ int main(int argc, char* argv[]) {
 
     ofstream out(output_time);
     
-    Matrix A, B, C,C2;
+    Matrix A, B, C, C2;
     read_bin(input_file_bin, A, B);
     auto start = chrono::high_resolution_clock::now();
     C = mult_block(A, B);
+    /*C2 = mult(A, B);
+    if(C != C2){
+        cout << "WRONG!\n";
+    }*/
     auto end = chrono::high_resolution_clock::now();
     
    
